@@ -16,7 +16,7 @@ short_prompt = ChatPromptTemplate.from_template(
 )
 
 detailed_prompt = ChatPromptTemplate.from_template(
-    "Explain {topic} in detail"
+    "Explain {topic} in 3-4 lines"
 )
 
 # Input
@@ -33,4 +33,6 @@ result = chain.invoke({
 })
 
 print(result['short'])
+print("--------------********************-----------------")
+print("--------------********************-----------------")
 print(result['detailed'])
