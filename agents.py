@@ -9,6 +9,8 @@ from langchain_mistralai import ChatMistralAI
 from tavily import TavilyClient
 from langchain.tools import tool
 from langchain_core.messages import HumanMessage, ToolMessage
+from langchain.agents import create_agent 
+from langchain.agents.middleware import wrap_tool_call
 
 
 # ==========================================
@@ -123,105 +125,140 @@ llm = ChatMistralAI(
     temperature=0
 )
 
-tools = {
-    "get_weather": get_weather,
-    "get_news": get_news
-}
+# tools = {
+#     "get_weather": get_weather,
+#     "get_news": get_news
+# }
 
-llm_with_tools = llm.bind_tools(list(tools.values()))
+# llm_with_tools = llm.bind_tools(list(tools.values()))
 
 
-# ==========================================
-# 5. AGENT LOOP
-# ==========================================
+# # ==========================================
+# # 5. AGENT LOOP
+# # ==========================================
 
-messages = []
+# messages = []
 
-print("\nCity Intelligence System")
-print("Powered by Mistral AI + LangChain + Tavily")
-print("Type 'exit' to quit.\n")
+# print("\nCity Intelligence System")
+# print("Powered by Mistral AI + LangChain + Tavily")
+# print("Type 'exit' to quit.\n")
 
+
+# while True:
+
+#     user_input = input("User: ").strip()
+
+#     if user_input.lower() == "exit":
+#         print("Goodbye!")
+#         break
+
+#     if not user_input:
+#         continue
+
+#     messages.append(HumanMessage(content=user_input))
+
+#     # Agent reasoning loop
+#     while True:
+
+#         try:
+#             result = llm_with_tools.invoke(messages)
+
+#         except Exception as e:
+#             print(f"LLM Error: {e}")
+#             break
+
+#         # Store AI response
+#         messages.append(result)
+
+#         # Check whether LLM wants to call tools
+#         if result.tool_calls:
+
+#             for tool_call in result.tool_calls:
+
+#                 tool_name = tool_call["name"]
+#                 tool_args = tool_call["args"]
+#                 tool_id = tool_call["id"]
+
+#                 print(f"\nAI wants to execute: {tool_name}")
+#                 print(f"Arguments: {tool_args}")
+
+#                 # Validate tool name
+#                 if tool_name not in tools:
+
+#                     tool_result = f"Unknown tool: {tool_name}"
+
+#                 else:
+
+#                     # Human in the Loop
+#                     confirm = input(
+#                         f"Execute '{tool_name}'? (yes/no): "
+#                     ).strip().lower()
+
+#                     if confirm == "yes":
+
+#                         try:
+#                             tool_result = tools[tool_name].invoke(
+#                                 tool_args
+#                             )
+
+#                             print(
+#                                 f"\nTool Result:\n{tool_result}\n"
+#                             )
+
+#                         except Exception as e:
+#                             tool_result = f"Tool execution failed: {str(e)}"
+
+#                     else:
+
+#                         tool_result = "Tool execution skipped by user."
+
+#                         print("Tool execution skipped.")
+
+#                 # Send tool result back to LLM
+#                 messages.append(
+#                     ToolMessage(
+#                         content=str(tool_result),
+#                         tool_call_id=tool_id
+#                     )
+#                 )
+
+#         else:
+
+#             # Final AI response
+#             print(f"\nAI: {result.content}\n")
+#             break
+
+
+
+@wrap_tool_call
+def human_approval(request, handler):
+    """Ask for human approval before every tool call."""
+    tool_name = request.tool_call["name"]
+    confirm = input(f"Agent wants to call '{tool_name}'. Approve? (yes/no): ")
+
+    if confirm.lower() != "yes":
+        return ToolMessage(
+            content="Tool call denied by user.",
+            tool_call_id=request.tool_call["id"]
+        )
+
+    return handler(request)  
+
+agent = create_agent(
+    llm,
+    tools = [get_weather,get_news],
+    system_prompt= "you are a helpful city assistant.",
+    middleware= [human_approval]
+)
+
+print("City Agent | type exit to quit")
 
 while True:
-
-    user_input = input("User: ").strip()
-
+    user_input = input("You : ")
     if user_input.lower() == "exit":
-        print("Goodbye!")
-        break
+        break 
+    result = agent.invoke({
+        "messages": [{"role": "user", "content": user_input}]
+    })
 
-    if not user_input:
-        continue
-
-    messages.append(HumanMessage(content=user_input))
-
-    # Agent reasoning loop
-    while True:
-
-        try:
-            result = llm_with_tools.invoke(messages)
-
-        except Exception as e:
-            print(f"LLM Error: {e}")
-            break
-
-        # Store AI response
-        messages.append(result)
-
-        # Check whether LLM wants to call tools
-        if result.tool_calls:
-
-            for tool_call in result.tool_calls:
-
-                tool_name = tool_call["name"]
-                tool_args = tool_call["args"]
-                tool_id = tool_call["id"]
-
-                print(f"\nAI wants to execute: {tool_name}")
-                print(f"Arguments: {tool_args}")
-
-                # Validate tool name
-                if tool_name not in tools:
-
-                    tool_result = f"Unknown tool: {tool_name}"
-
-                else:
-
-                    # Human in the Loop
-                    confirm = input(
-                        f"Execute '{tool_name}'? (yes/no): "
-                    ).strip().lower()
-
-                    if confirm == "yes":
-
-                        try:
-                            tool_result = tools[tool_name].invoke(
-                                tool_args
-                            )
-
-                            print(
-                                f"\nTool Result:\n{tool_result}\n"
-                            )
-
-                        except Exception as e:
-                            tool_result = f"Tool execution failed: {str(e)}"
-
-                    else:
-
-                        tool_result = "Tool execution skipped by user."
-
-                        print("Tool execution skipped.")
-
-                # Send tool result back to LLM
-                messages.append(
-                    ToolMessage(
-                        content=str(tool_result),
-                        tool_call_id=tool_id
-                    )
-                )
-
-        else:
-
-            # Final AI response
-            print(f"\nAI: {result.content}\n")
-            break
+    print("bot : ", result['messages'][-1].content )
